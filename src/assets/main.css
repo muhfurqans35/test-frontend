@@ -34,6 +34,7 @@ a,
   }
 } */
 @import "tailwindcss";
+
 .btn {
   text-transform: unset !important;
 }
