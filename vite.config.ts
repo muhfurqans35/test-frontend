@@ -10,7 +10,13 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: '/test-frontend/',
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag.startsWith('md-'),
+        }
+      }
+    }),
     vueJsx(),
     vueDevTools(),
     tailwindcss(),

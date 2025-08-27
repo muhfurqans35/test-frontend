@@ -21,6 +21,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@material/web": "^2.4.0",
     "@mdi/font": "^7.4.47",
     "@tailwindcss/vite": "^4.1.12",
     "axios": "^1.11.0",

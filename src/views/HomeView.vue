@@ -1,321 +1,566 @@
 <template>
-  <v-container class="py-6">
-    <!-- Snackbar -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" location="top" class="rounded-md">
-      {{ snackbar.message }}
-      <template #actions>
-        <v-btn variant="text" @click="snackbar.show = false">Tutup</v-btn>
-      </template>
-    </v-snackbar>
+  <div class="py-6 px-4 md:px-6">
+    <!-- Toast -->
+    <div class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2">
+      <div v-for="toast in toasts" :key="toast.id" :class="[
+        'flex items-center gap-3 px-4 py-3 rounded-md shadow-lg transition-all duration-300',
+        toast.type === 'success'
+          ? 'bg-green-600 text-white'
+          : toast.type === 'error'
+            ? 'bg-red-600 text-white'
+            : toast.type === 'warning'
+              ? 'bg-orange-600 text-white'
+              : 'bg-blue-600 text-white',
+      ]">
+        <component :is="getLucideIcon(toast.type)" class="w-5 h-5" />
+        <span class="text-sm font-medium">{{ toast.message }}</span>
+        <button @click="removeToast(toast.id)"
+          class="ml-2 text-white hover:bg-black hover:bg-opacity-10 rounded p-1 transition-colors">
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+    </div>
 
     <!-- Header -->
-    <v-row align="center" justify="space-between">
-      <v-col cols="6">
-        <h1 class="text-h5 font-extrabold">Daftar Diskon</h1>
-        <div v-if="discounts.length" class="text-subtitle-1 font-medium text-gray-500">
+    <div class="grid grid-cols-2 items-center gap-4 mb-6">
+      <div>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-900">
+          Daftar Diskon
+        </h1>
+        <div v-if="discounts.length" class="text-base font-medium text-gray-500 mt-1">
           Total jumlah diskon: {{ totalDiscountCount }}
         </div>
-      </v-col>
-      <v-col cols="6" class="text-end">
-        <v-btn color="success" variant="flat" rounded="pill" @click="openModal">
-          <Plus class="w-4 h-4 mr-1" /> Tambah Diskon
-        </v-btn>
-        <v-btn v-if="selected.length" color="error" variant="flat" rounded="pill" class="ms-2 normal-case"
-          @click="openDeleteMultipleModal">
-          Hapus
-        </v-btn>
-      </v-col>
-    </v-row>
+      </div>
+      <div class="text-right flex justify-end">
+        <button @click="openModal"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors font-medium text-sm">
+          <Plus class="w-4 h-4" />
+          Tambah Diskon
+        </button>
+        <button v-if="selected.length" @click="openDeleteMultipleModal"
+          class="inline-flex items-center gap-1 px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-medium text-sm ml-2">
+          Hapus ({{ selected.length }})
+        </button>
+      </div>
+    </div>
 
     <!-- Filter -->
-    <v-row align="center" dense>
-      <v-col :cols="discounts.length ? 4 : 0" v-if="discounts.length">
-        <v-text-field v-model="search" placeholder="Cari Diskon..." variant="outlined" rounded="pill" density="compact"
-          clearable>
-          <template #prepend-inner>
-            <Search class="w-4 h-4 text-gray-500" />
-          </template>
-        </v-text-field>
-      </v-col>
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6 items-end">
+      <div v-if="discounts.length" class="md:col-span-3">
+        <md-outlined-text-field placeholder="Cari Diskon..." class="w-full" v-model="search" @input="handleSearch"
+          style="--md-outlined-text-field-container-shape: 28px;">
+          <Search slot="leading-icon" class="w-4 h-4 text-gray-500" />
+        </md-outlined-text-field>
+      </div>
 
-      <v-col :cols="discounts.length ? 3 : 4">
-        <v-select v-model="selectedStore" :items="stores" item-title="nama_toko" item-value="_id" placeholder="Pilih Toko"
-          variant="outlined" rounded="lg" density="compact" clearable>
-          <template #prepend-inner>
+      <div class="md:col-span-3">
+        <md-outlined-select class="w-full" v-model="selectedStore" @change="handleStoreChange"
+          style="--md-outlined-text-field-container-shape: 28px;">
+          <div slot="leading-icon" class="flex items-center justify-center w-5 h-5">
             <Store class="w-4 h-4 text-gray-500" />
-          </template>
-        </v-select>
-      </v-col>
-    </v-row>
+          </div>
+          <md-select-option value="">
+            <div slot="headline">Semua Toko</div>
+          </md-select-option>
+          <md-select-option v-for="store in stores" :key="store._id" :value="store._id">
+            <div slot="headline">{{ store.nama_toko }}</div>
+          </md-select-option>
+        </md-outlined-select>
+      </div>
+    </div>
 
     <!-- Table -->
-    <v-data-table v-model="selected" :items="filteredDiscounts" return-object :headers="headers" item-key="_id"
-      class="elevation-0 green-checkbox" :items-per-page="10" :hide-default-footer="!filteredDiscounts.length"
-      :show-select="filteredDiscounts.length > 0" :hide-default-header="!filteredDiscounts.length" rounded="md" border z>
-      <template #item.nama_diskon="{ item }">
-        <div class="flex items-center gap-2">
-          <span>{{ item.nama_diskon }}</span>
-          <v-chip v-if="item._id === newItemId" size="x-small" variant="flat"
-            class="rounded-md bg-white text-blue border">
-            baru
-          </v-chip>
-        </div>
-      </template>
-      <template #item.jumlah="{ item }">
-        <span v-if="item.type === 'percentage'">{{ item.jumlah }}%</span>
-        <span v-else>Rp {{ item.jumlah.toLocaleString('id-ID') }}</span>
-      </template>
-      <template #item.actions="{ item }">
-        <v-btn variant="text" @click="editItem(item)">
-          <PencilLine size=18 />
-        </v-btn>
-      </template>
-      <template #no-data>
-        <v-card class="py-15 text-center elevation-0 border rounded-md">
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full" v-if="filteredDiscounts.length">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-4 py-3 text-left w-12">
+                <input type="checkbox" @change="toggleSelectAll" :indeterminate.prop="isIndeterminate"
+                  :checked="isAllSelected" class="w-4 h-4 border-black rounded focus:ring-green-500 accent-green-600" />
+              </th>
+              <th class="px-4 py-3 text-left text-medium font-semibold text-gray-900">
+                <button @click="handleSort('nama_diskon')"
+                  class="flex items-center gap-1 hover:text-gray-700 transition-colors group">
+                  <span>Nama Diskon</span>
+                  <div class="flex flex-col text-xs">
+                    <ChevronsUpDown size="12" v-if="sortField !== 'nama_diskon'" />
+                    <ArrowUp size="12" v-else-if="sortField === 'nama_diskon' && sortOrder === 'asc'" />
+                    <ArrowDown size="12" v-else-if="sortField === 'nama_diskon' && sortOrder === 'desc'" />
+                  </div>
+                </button>
+              </th>
+              <th class="px-4 py-3 text-left text-medium font-semibold text-gray-900">
+                <button @click="handleSort('jumlah')"
+                  class="flex items-center gap-1 hover:text-gray-700 transition-colors group">
+                  <span>Nilai Diskon</span>
+                  <div class="flex flex-col text-xs">
+                    <ChevronsUpDown size="12" v-if="sortField !== 'jumlah'" />
+                    <ArrowUp size="12" v-else-if="sortField === 'jumlah' && sortOrder === 'asc'" />
+                    <ArrowDown size="12" v-else-if="sortField === 'jumlah' && sortOrder === 'desc'" />
+                  </div>
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr v-for="item in paginatedDiscounts" :key="item._id" class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3">
+                <input type="checkbox" :value="item._id" @change="toggleSelect(item._id)"
+                  :checked="selected.includes(item._id)"
+                  class="w-4 h-4 border-black rounded focus:ring-green-500 accent-green-600" />
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-gray-900">{{ item.nama_diskon }}</span>
+                  <span v-if="item._id === newItemId"
+                    class="inline-flex items-center px-2 text-xs bg-blue-50 text-blue-600 rounded-full border">
+                    baru
+                  </span>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-900">
+                <span v-if="item.type === 'percentage'">{{ item.jumlah }}%</span>
+                <span v-else>Rp {{ item.jumlah.toLocaleString('id-ID') }}</span>
+              </td>
+              <td class="px-4 py-3">
+                <button @click="editItem(item)" class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                  <PencilLine class="w-4 h-4" />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-if="!filteredDiscounts.length" class="py-16 px-4 text-center">
           <img src="@/assets/Layer_1.svg" class="mx-auto mb-2" />
-          <div class="text-subtitle-1 font-medium">Belum ada diskon</div>
-          <div class="text-subtitle-2 font-medium">
-            Silahkan tambahkan diskon untuk menarik pelanggan <br />dan meningkatkan penjualan
+          <div class="text-lg font-medium text-gray-900 mb-2">
+            Belum ada diskon
           </div>
-        </v-card>
-      </template>
-    </v-data-table>
+          <div class="text-sm font-medium text-gray-500 max-w-md mx-auto">
+            Silahkan tambahkan diskon untuk menarik pelanggan<br />
+            dan meningkatkan penjualan
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <!-- Modal Tambah/Edit Diskon -->
-    <v-dialog v-model="modal" max-width="500">
-      <v-card class="rounded-xl pa-4">
-        <v-card-title class="d-flex justify-space-between align-center pa-0 mb-4">
-          <span class="text-lg font-bold">{{ editMode ? 'Ubah Diskon' : 'Tambah Diskon' }}</span>
-          <v-btn icon variant="text" size="small" @click="closeModal">
-            <X size="18" />
-          </v-btn>
-        </v-card-title>
+    <!-- Modal Tambah/Ubah -->
+    <md-dialog ref="modalRef" class="max-w-md w-full mx-auto my-auto">
+      <div slot="headline" class="flex justify-between items-center p-4 border-b border-gray-200">
+        <span class="text-lg font-bold">{{
+          editMode ? "Ubah Diskon" : "Tambah Diskon"
+        }}</span>
+        <button @click="closeModal" class="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
+          <X class="w-4 h-4" />
+        </button>
+      </div>
 
-        <v-form ref="formRef" v-model="formValid">
-          <v-card-text class="pa-0">
-            <div class="mb-4">
-              <v-text-field v-model="form.nama_diskon" label="Nama Diskon"
-                placeholder="Misal: Diskon opening, diskon akhir tahun" variant="outlined" rounded="lg"
-                :rules="[validateNama]" :error-messages="nameError" />
-            </div>
-            <div class="mb-4">
-              <div class="d-flex gap-4">
-                <v-text-field v-model.number="form.jumlah" label="Diskon" placeholder="0" type="number" variant="outlined"
-                  rounded="lg" :rules="[validateJumlah]" min="0" class="flex-1"
-                  :max="form.type === 'percentage' ? 100 : undefined">
-                  <template v-if="form.type === 'percentage'" #append-inner>
-                    <span class="text-gray-500 font-medium">%</span>
-                  </template>
-                  <template v-else #prepend-inner>
-                    <span class="text-gray-500 font-medium">Rp</span>
-                  </template>
-                </v-text-field>
-                <v-btn-toggle v-model="form.type" mandatory rounded="pill">
-                  <v-btn value="percentage" variant="outlined" class="text-none"
-                    :class="form.type === 'percentage' ? 'bg-white border border-success text-success' : ''">
-                    <Check v-if="form.type === 'percentage'" class="mr-1" size="14" /> %
-                  </v-btn>
-                  <v-btn value="nominal" variant="outlined" class="text-none"
-                    :class="form.type === 'nominal' ? 'bg-white border border-success text-success' : ''">
-                    <Check v-if="form.type === 'nominal'" class="mr-1" size="14" /> Rp
-                  </v-btn>
-                </v-btn-toggle>
-              </div>
-            </div>
-          </v-card-text>
+      <form slot="content" @submit.prevent="saveItem" class="space-y-4 p-4">
+        <md-outlined-text-field v-model="form.nama_diskon" label="Nama Diskon"
+          placeholder="Misal: Diskon opening, diskon akhir tahun" class="w-full" :error="!!nameError"
+          :error-text="nameError" required />
+        <div class="flex gap-4 items-center">
+          <md-outlined-text-field v-model.number="form.jumlah" label="Diskon" placeholder="0" type="number" class="flex-1"
+            :error="!!jumlahError" :error-text="jumlahError" :min="0" :max="form.type === 'percentage' ? 100 : undefined">
+            <span v-if="form.type === 'nominal'" slot="leading-icon" class="text-gray-500 text-sm pl-2">
+              Rp
+            </span>
+            <span v-if="form.type === 'percentage'" slot="trailing-icon" class="text-gray-500 text-sm pr-2">
+              %
+            </span>
+          </md-outlined-text-field>
 
-          <v-card-actions class="pa-0 d-flex justify-space-between align-center">
-            <v-btn v-if="editMode" color="error" variant="outlined" class="rounded-pill px-5"
-              @click="openDeleteModal(form)">
-              Hapus
-            </v-btn>
-            <v-btn color="success" variant="flat" class="rounded-pill text-white" :class="editMode ? 'px-6' : 'w-100'"
-              @click="saveItem" :disabled="!formValid || !!nameError || !selectedStore">
-              Simpan
-            </v-btn>
-          </v-card-actions>
-        </v-form>
-      </v-card>
-    </v-dialog>
+          <div class="flex rounded-full border border-gray-300 overflow-hidden bg-white">
+            <button type="button" @click="form.type = 'percentage'" :class="[
+              'px-4 py-2 text-sm font-medium flex items-center gap-1 border-r border-gray-300 transition-colors',
+              form.type === 'percentage'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50',
+            ]">
+              <Check v-if="form.type === 'percentage'" class="w-3 h-3" /> %
+            </button>
+            <button type="button" @click="form.type = 'nominal'" :class="[
+              'px-4 py-2 text-sm font-medium flex items-center gap-1 transition-colors',
+              form.type === 'nominal'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50',
+            ]">
+              <Check v-if="form.type === 'nominal'" class="w-3 h-3" /> Rp
+            </button>
+          </div>
+        </div>
+      </form>
 
-    <!-- Modal Konfirmasi Hapus Satu Item -->
-    <v-dialog v-model="deleteModal" max-width="600">
-      <v-card class="rounded-xl pa-4">
-        <v-card-title><span class="text-lg font-bold pa-0 mb-4">Hapus Diskon</span></v-card-title>
-        <v-card-text class="text-subtitle-1 mb-4">
-          Apakah Anda yakin ingin menghapus diskon "{{ deleteTargetName }}"?
-          <ul class="ml-6 list-disc">
-            <li>Diskon yang dihapus tidak bisa dikembalikan lagi.</li>
-          </ul>
-        </v-card-text>
-        <v-card-actions class="d-flex justify-end gap-2 pa-0">
-          <v-btn color="gray" variant="outlined" class="rounded-pill text-red px-6" @click="closeDeleteModal">
-            Batalkan
-          </v-btn>
-          <v-btn color="error" variant="flat" class="rounded-pill text-white px-6" @click="deleteItemConfirmed">
-            Hapus
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      <div slot="actions" class="flex justify-between items-center gap-3 p-4 border-t border-gray-200">
+        <button v-if="editMode" @click="openDeleteModal(form)"
+          class="px-5 py-2 border border-red-600 text-red-600 rounded-full hover:bg-red-50 transition-colors font-medium text-sm">
+          Hapus
+        </button>
+        <div v-else class="flex-1"></div>
 
-    <!-- Modal Konfirmasi Hapus Banyak Item -->
-    <v-dialog v-model="deleteMultipleModal" max-width="600">
-      <v-card class="rounded-xl pa-4">
-        <v-card-title><span class="text-lg font-bold pa-0 mb-4">Hapus Diskon</span></v-card-title>
-        <v-card-text class="text-subtitle-1 mb-4">
-          Apakah Anda yakin ingin menghapus diskon yang dipilih?
-          <ul class="ml-6 list-disc">
-            <li>Diskon yang dihapus tidak bisa dikembalikan lagi.</li>
-          </ul>
-        </v-card-text>
-        <v-card-actions class="d-flex justify-end gap-2 pa-0">
-          <v-btn color="gray" variant="outlined" class="rounded-pill text-red px-6" @click="closeDeleteMultipleModal">
-            Batalkan
-          </v-btn>
-          <v-btn color="error" variant="flat" class="rounded-pill text-white px-6" @click="deleteSelectedConfirmed">
-            Hapus
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+        <button @click="saveItem" :disabled="!formValid || !selectedStore"
+          class="px-6 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          Simpan
+        </button>
+      </div>
+    </md-dialog>
+    <!-- Modal Hapus Single -->
+    <md-dialog ref="deleteModalRef" class="max-w-md w-full mx-auto my-auto">
+      <div slot="headline" class="p-4 font-bold text-lg">Hapus Diskon</div>
+      <div slot="content" class="p-4 text-gray-700">
+        Apakah Anda yakin ingin menghapus diskon
+        <span class="font-semibold text-red-600">"{{ deleteTargetName }}"</span>?
+        <ul class="ml-6 list-disc">
+          <li>Diskon yang dihapus tidak bisa dikembalikan lagi.</li>
+        </ul>
+      </div>
+      <div slot="actions" class="flex justify-end gap-2 p-4 border-t border-gray-200">
+        <button @click="closeDeleteModal" class="px-4 py-2 rounded-full border text-red-600 hover:bg-gray-50">
+          Batalkan
+        </button>
+        <button @click="confirmDelete" class="px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700">
+          Hapus
+        </button>
+      </div>
+    </md-dialog>
 
-  </v-container>
+    <!-- Modal Hapus Multiple -->
+    <md-dialog ref="deleteMultipleModalRef" class="max-w-md w-full mx-auto my-auto">
+      <div slot="headline" class="p-4 font-bold text-lg">Hapus Beberapa Diskon</div>
+      <div slot="content" class="p-4 text-gray-700">
+        Apakah Anda yakin ingin menghapus
+        <span class="font-semibold text-red-600">{{ selected.length }}</span>
+        diskon terpilih?
+        <ul class="ml-6 list-disc">
+          <li>Diskon yang dihapus tidak bisa dikembalikan lagi.</li>
+        </ul>
+      </div>
+      <div slot="actions" class="flex justify-end gap-2 p-4 border-t border-gray-200">
+        <button @click="closeDeleteMultipleModal" class="px-4 py-2 rounded-full border text-red-600 hover:bg-gray-50">
+          Batalkan
+        </button>
+        <button @click="confirmDeleteMultiple" class="px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700">
+          Hapus
+        </button>
+      </div>
+    </md-dialog>
+
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import axios from 'axios'
-import { Plus, PencilLine, Search, Store, X, Check } from 'lucide-vue-next'
+import { ref, computed, onMounted } from "vue";
+import axios from "axios";
+import {
+  Plus,
+  PencilLine,
+  Search,
+  Store,
+  X,
+  Check,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  XCircle,
+  ArrowDown,
+  ArrowUp,
+  ChevronsUpDown
+} from "lucide-vue-next";
 
-const API_BASE_URL = 'https://crudcrud.com/api/be9148f736c241b4810f4e09f01dcf90'
-const DISCOUNT_API_URL = `${API_BASE_URL}/diskon`
-const STORE_API_URL = `${API_BASE_URL}/toko`
+import "@material/web/textfield/outlined-text-field.js";
+import "@material/web/select/outlined-select.js";
+import "@material/web/select/select-option.js";
+import "@material/web/dialog/dialog.js";
 
-const newItemId = ref(null)
-const discounts = ref([])
-const stores = ref([])
-const search = ref('')
-const selectedStore = ref('')
-const selected = ref([])
-const modal = ref(false)
-const editMode = ref(false)
-const form = ref({ _id: null, nama_diskon: '', jumlah: null, toko_id: '', type: 'percentage' })
-const formValid = ref(false)
-const formRef = ref(null)
-const snackbar = ref({ show: false, message: '', color: 'success' })
-const nameError = ref('')
+const API_BASE_URL = "https://crudcrud.com/api/47d2aa72b4fc4300967d09b5ac6c4e9c";
+const DISCOUNT_API_URL = `${API_BASE_URL}/diskon`;
+const STORE_API_URL = `${API_BASE_URL}/toko`;
 
-// Hapus item
-const deleteModal = ref(false)
-const deleteTarget = ref(null)
-const deleteTargetName = ref('')
+const discounts = ref([]);
+const stores = ref([]);
+const search = ref("");
+const selectedStore = ref("");
+const selected = ref([]);
+const newItemId = ref(null);
 
-// Hapus banyak
-const deleteMultipleModal = ref(false)
+// Sorting
+const sortField = ref(null);
+const sortOrder = ref('asc');
 
-const headers = [
-  { title: 'Nama Diskon', key: 'nama_diskon', align: 'start' },
-  { title: 'Nilai Diskon', key: 'jumlah', align: 'start' },
-  { title: '', key: 'actions', align: 'start', sortable: false },
-]
+const editMode = ref(false);
+const form = ref({
+  _id: null,
+  nama_diskon: "",
+  jumlah: null,
+  toko_id: "",
+  type: "percentage",
+});
 
-const filteredDiscounts = computed(() =>
-  discounts.value.filter(
-    d => (!selectedStore.value || d.toko_id === selectedStore.value) &&
-      d.nama_diskon.toLowerCase().includes(search.value.toLowerCase())
-  )
-)
-const totalDiscountCount = computed(() => discounts.value.length)
+const nameError = ref("");
+const jumlahError = ref("");
 
-// Validasi
-const validateNama = (value) => {
-  if (!value || value.trim() === '') return 'Nama diskon wajib diisi'
-  if (value.trim().length < 3) return 'Nama diskon minimal 3 karakter'
-  return true
+const deleteModalRef = ref(null);
+const deleteMultipleModalRef = ref(null);
+const deleteTarget = ref(null);
+const deleteTargetName = ref("");
+
+function openDeleteModal(item) {
+  deleteTarget.value = item;
+  deleteTargetName.value = item.nama_diskon;
+  deleteModalRef.value?.show();
 }
-const validateJumlah = (value) => {
-  if (value === null || value === '' || value === undefined) return 'Nilai diskon wajib diisi'
-  if (value <= 0) return 'Nilai diskon harus lebih dari 0'
-  if (form.value.type === 'percentage' && value > 100) return 'Persentase tidak boleh lebih dari 100%'
-  return true
+
+function closeDeleteModal() {
+  deleteModalRef.value?.close();
 }
 
-watch(() => form.value.nama_diskon, (newName) => {
-  if (newName && newName.trim()) {
-    nameError.value = discounts.value.some(d => d.nama_diskon.toLowerCase() === newName.toLowerCase() && d._id !== form.value._id) ? 'Nama diskon sudah ada' : ''
-  } else {
-    nameError.value = ''
+async function confirmDelete() {
+  try {
+    await axios.delete(`${DISCOUNT_API_URL}/${deleteTarget.value._id}`);
+    discounts.value = discounts.value.filter(d => d._id !== deleteTarget.value._id);
+    showToast(`Diskon "${deleteTargetName.value}" berhasil dihapus!`, "success");
+  } catch {
+    showToast("Gagal menghapus diskon!", "error");
+  } finally {
+    closeDeleteModal();
   }
-})
+}
+
+function openDeleteMultipleModal() {
+  deleteMultipleModalRef.value?.show();
+}
+
+function closeDeleteMultipleModal() {
+  deleteMultipleModalRef.value?.close();
+}
+
+async function confirmDeleteMultiple() {
+  try {
+    // Hapus satu per satu ke API
+    for (const id of selected.value) {
+      await axios.delete(`${DISCOUNT_API_URL}/${id}`);
+    }
+    // Update state
+    discounts.value = discounts.value.filter(d => !selected.value.includes(d._id));
+    showToast(`${selected.value.length} diskon berhasil dihapus!`, "success");
+    selected.value = [];
+  } catch {
+    showToast("Gagal menghapus beberapa diskon!", "error");
+  } finally {
+    closeDeleteMultipleModal();
+  }
+}
+
+
+const validateNama = (value) => {
+  if (!value || value.trim() === "") return "Nama diskon tidak boleh kosong";
+  if (value.trim().length < 3) return "Nama diskon minimal 3 karakter";
+  if (
+    discounts.value.some(
+      (d) =>
+        d?.nama_diskon?.toLowerCase() === value.toLowerCase() &&
+        d._id !== form.value._id
+    )
+  ) {
+    return "Nama diskon sudah ada";
+  }
+  return "";
+};
+
+const validateJumlah = (value) => {
+  if (value === null || value === "" || value === undefined)
+    return "Nilai diskon tidak boleh kosong";
+  if (value <= 0) return "Nilai diskon harus lebih dari 0";
+  if (form.value.type === "percentage" && value > 100)
+    return "Persentase tidak boleh lebih dari 100%";
+  return "";
+};
+
+const formValid = computed(() => {
+  nameError.value = validateNama(form.value.nama_diskon);
+  jumlahError.value = validateJumlah(form.value.jumlah);
+  return !nameError.value && !jumlahError.value;
+});
+
+const toasts = ref([]);
+function showToast(message, type = "success") {
+  const id = Date.now();
+  toasts.value.push({ id, message, type });
+  setTimeout(() => removeToast(id), 4000);
+}
+function removeToast(id) {
+  toasts.value = toasts.value.filter((t) => t.id !== id);
+}
+const getLucideIcon = (type) => {
+  switch (type) {
+    case "success": return CheckCircle;
+    case "error": return XCircle;
+    case "warning": return AlertTriangle;
+    default: return Info;
+  }
+};
+
+const filteredDiscounts = computed(() => {
+  let filtered = discounts.value.filter((d) => {
+    const matchStore = !selectedStore.value || d.toko_id === selectedStore.value;
+    const matchSearch = d?.nama_diskon?.toLowerCase().includes(search.value.toLowerCase() || "");
+    return matchStore && matchSearch;
+  });
+
+  // Apply sorting
+  if (sortField.value) {
+    filtered = [...filtered].sort((a, b) => {
+      let aValue = a[sortField.value];
+      let bValue = b[sortField.value];
+
+      // For string comparison (nama_diskon)
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (sortOrder.value === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  }
+
+  return filtered;
+});
+
+const totalDiscountCount = computed(() => discounts.value.length);
+
+const paginatedDiscounts = computed(() => filteredDiscounts.value);
+
+const isAllSelected = computed(() =>
+  filteredDiscounts.value.length > 0 &&
+  selected.value.length === filteredDiscounts.value.length
+);
+const isIndeterminate = computed(() =>
+  selected.value.length > 0 && selected.value.length < filteredDiscounts.value.length
+);
+
+function toggleSelectAll(e) {
+  if (e.target.checked) {
+    selected.value = filteredDiscounts.value.map((d) => d._id);
+  } else {
+    selected.value = [];
+  }
+}
+
+function toggleSelect(id) {
+  if (selected.value.includes(id)) {
+    selected.value = selected.value.filter((s) => s !== id);
+  } else {
+    selected.value.push(id);
+  }
+}
+
+function handleSort(field) {
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField.value = field;
+    sortOrder.value = 'asc';
+  }
+}
+
+function handleStoreChange() {
+  selected.value = [];
+}
 
 async function fetchStores() {
-  try { const res = await axios.get(STORE_API_URL); stores.value = res.data }
-  catch { snackbar.value = { show: true, message: 'Gagal mengambil data toko!', color: 'error' } }
-}
-async function fetchDiscounts() {
-  try { const res = await axios.get(DISCOUNT_API_URL); discounts.value = res.data }
-  catch { snackbar.value = { show: true, message: 'Gagal mengambil data diskon!', color: 'error' } }
+  try {
+    const res = await axios.get(STORE_API_URL);
+    stores.value = res.data;
+  } catch {
+    showToast("Gagal mengambil data toko!", "error");
+  }
 }
 
+async function fetchDiscounts() {
+  try {
+    const res = await axios.get(DISCOUNT_API_URL);
+    discounts.value = res.data;
+  } catch {
+    showToast("Gagal mengambil data diskon!", "error");
+  }
+}
+
+const modalRef = ref(null);
 function openModal() {
   if (!selectedStore.value) {
-    snackbar.value = { show: true, message: 'Pilih toko terlebih dahulu di filter!', color: 'warning' }
-    return
+    showToast("Pilih toko terlebih dahulu di filter!", "warning");
+    return;
   }
-  editMode.value = false
-  form.value = { _id: null, nama_diskon: '', jumlah: null, toko_id: selectedStore.value, type: 'percentage' }
-  nameError.value = ''
-  modal.value = true
+  editMode.value = false;
+  form.value = {
+    _id: null,
+    nama_diskon: "",
+    jumlah: null,
+    toko_id: selectedStore.value,
+    type: "percentage",
+  };
+  nameError.value = "";
+  jumlahError.value = "";
+  modalRef.value?.show();
 }
 
-function closeModal() { modal.value = false; nameError.value = ''; formRef.value?.resetValidation() }
+function closeModal() {
+  modalRef.value?.close();
+}
 
-function editItem(item) { editMode.value = true; form.value = { ...item }; nameError.value = ''; modal.value = true }
+function editItem(item) {
+  editMode.value = true;
+  form.value = { ...item };
+  nameError.value = "";
+  jumlahError.value = "";
+  modalRef.value?.show();
+}
 
 async function saveItem() {
-  const { valid } = await formRef.value.validate()
-  if (!valid || nameError.value) { snackbar.value = { show: true, message: 'Mohon perbaiki kesalahan pada form!', color: 'error' }; return }
+  if (!formValid.value) {
+    showToast("Mohon perbaiki kesalahan pada form!", "error");
+    return;
+  }
   try {
-    const payload = { nama_diskon: form.value.nama_diskon.trim(), jumlah: form.value.jumlah, toko_id: form.value.toko_id, type: form.value.type }
+    const payload = {
+      nama_diskon: form.value.nama_diskon.trim(),
+      jumlah: form.value.jumlah,
+      toko_id: form.value.toko_id,
+      type: form.value.type,
+    };
     if (editMode.value) {
-      await axios.put(`${DISCOUNT_API_URL}/${form.value._id}`, payload)
-      const idx = discounts.value.findIndex(d => d._id === form.value._id)
-      if (idx !== -1) discounts.value[idx] = { ...form.value, ...payload }
-      snackbar.value = { show: true, message: `Diskon "${payload.nama_diskon}" berhasil diperbarui!`, color: 'success' }
+      await axios.put(`${DISCOUNT_API_URL}/${form.value._id}`, payload);
+      const idx = discounts.value.findIndex((d) => d._id === form.value._id);
+      if (idx !== -1) discounts.value[idx] = { ...form.value, ...payload };
+      showToast(`Diskon "${payload.nama_diskon}" berhasil diperbarui!`, "success");
     } else {
-      const res = await axios.post(DISCOUNT_API_URL, payload)
-      discounts.value.push(res.data)
-      newItemId.value = res.data._id
-      snackbar.value = { show: true, message: `Diskon "${payload.nama_diskon}" berhasil ditambahkan!`, color: 'success' }
+      const res = await axios.post(DISCOUNT_API_URL, payload);
+      discounts.value.push(res.data);
+      newItemId.value = res.data._id;
+      showToast(`Diskon "${payload.nama_diskon}" berhasil ditambahkan!`, "success");
     }
-    closeModal()
-  } catch { snackbar.value = { show: true, message: 'Gagal menyimpan diskon!', color: 'error' } }
+    closeModal();
+  } catch {
+    showToast("Gagal menyimpan diskon!", "error");
+  }
 }
-
-// Hapus satu
-function openDeleteModal(item) { deleteTarget.value = item; deleteTargetName.value = item.nama_diskon; deleteModal.value = true }
-function closeDeleteModal() { deleteModal.value = false; deleteTarget.value = null; deleteTargetName.value = '' }
-async function deleteItemConfirmed() {
-  if (!deleteTarget.value) return
-  try { await axios.delete(`${DISCOUNT_API_URL}/${deleteTarget.value._id}`); discounts.value = discounts.value.filter(d => d._id !== deleteTarget.value._id); snackbar.value = { show: true, message: `Diskon "${deleteTarget.value.nama_diskon}" berhasil dihapus!`, color: 'success' } }
-  catch { snackbar.value = { show: true, message: 'Gagal menghapus diskon!', color: 'error' } }
-  finally { closeDeleteModal() }
-}
-
-// Hapus banyak
-function openDeleteMultipleModal() { deleteMultipleModal.value = true }
-function closeDeleteMultipleModal() { deleteMultipleModal.value = false }
-async function deleteSelectedConfirmed() {
-  try {
-    for (const item of selected.value) { await axios.delete(`${DISCOUNT_API_URL}/${item._id}`) }
-    const deletedIds = selected.value.map(i => i._id)
-    discounts.value = discounts.value.filter(d => !deletedIds.includes(d._id))
-    snackbar.value = { show: true, message: `${selected.value.length} diskon berhasil dihapus!`, color: 'success' }
-    selected.value = []
-  } catch { snackbar.value = { show: true, message: 'Gagal menghapus diskon!', color: 'error' } }
-  finally { closeDeleteMultipleModal() }
-}
-
-onMounted(async () => { await fetchStores(); await fetchDiscounts() })
+onMounted(async () => {
+  await fetchStores();
+  await fetchDiscounts();
+});
 </script>
+
+<style scoped>
+md-outlined-select {
+  --md-outlined-select-text-field-container-shape: 16px;
+}
+
+md-outlined-select [slot="leading-icon"] {
+  color: inherit !important;
+}
+</style>
